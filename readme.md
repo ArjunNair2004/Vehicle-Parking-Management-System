@@ -37,17 +37,31 @@ An AI-powered, full-stack parking management system designed to optimize urban p
 ├── 📄 docker-compose.yml       # Docker configuration for MySQL
 ├── 📄 requirements.txt         # Python dependencies
 └── 📄 README.md                # Project documentation
+
 🚀 Installation & SetupPrerequisitesPython 3.11+Docker Desktop (Running)GitStep-by-Step Guide1. Clone the repositoryBashgit clone <YOUR_GITHUB_REPO_URL>
+
 cd VehicleDBMS
 2. Start the Dockerized DatabaseSpin up the MySQL container on port 3307.Bashdocker compose up -d
 3. Set up the Python Virtual EnvironmentBashpython -m venv venv
 
 # On Windows:
+
 venv\Scripts\activate
+
 # On Mac/Linux:
 source venv/bin/activate
+
 4. Install DependenciesBashpip install -r requirements.txt
+
 5. Initialize the Database SchemaCreate the tables (parking_slots, vehicles, receipts) and seed the initial 10 parking slots.Bashpython scripts/setup_db.py
+
 6. Train the AI Pricing ModelGenerate the serialized .pkl file required by the API to calculate dynamic exit fees.Bashpython ml/pricing_model.py
+
 7. Start the FastAPI ServerLaunch the Uvicorn server with live-reloading enabled.Bashuvicorn app.api:app --reload
-8. Access the DashboardOpen your web browser and navigate to: http://127.0.0.1:8000/📡 API EndpointsThe backend exposes the following RESTful endpoints:MethodEndpointDescriptionRequest BodyGET/Serves the HTML frontend dashboard.NoneGET/statusRetrieves the live occupancy status of all parking slots.NonePOST/parkAssigns the nearest available slot to a new vehicle.{"vehicle_number": "KA-01", "vehicle_type": "Car"}POST/exitProcesses vehicle exit, calculates AI dynamic fee, frees slot.{"slot_number": "3"}🔮 Future ScopeA (A-Star) Pathfinding:* Upgrade the current L-shape routing simulation to calculate true obstacle-aware shortest paths.Live Occupancy Telemetry: Replace the static occupancy rate in the ML model with real-time database queries to aggressively scale pricing during peak hours.Computer Vision Integration: Implement headless OpenCV/EasyOCR to automatically extract license plate strings from camera feeds, removing the need for manual text input
+
+8. Access the DashboardOpen your web browser and navigate to: http://127.0.0.1:8000/
+
+📡 A🔮 Future Scope
+A (A-Star) Pathfinding:* Upgrade the current L-shape routing simulation to calculate true obstacle-aware shortest paths.
+Live Occupancy Telemetry: Replace the static occupancy rate in the ML model with real-time database queries to aggressively scale pricing during peak hours.
+Computer Vision Integration: Implement headless OpenCV/EasyOCR to automatically extract license plate strings from camera feeds, removing the need for manual text input
