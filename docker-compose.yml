@@ -1,0 +1,10 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: parking_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: Sum10_slam
+      MYSQL_DATABASE: vehicle_parking
+    ports:
+      - "3307:3306"

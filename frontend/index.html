@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking Dashboard | Spatial Routing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8 font-sans">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-bold text-gray-800 mb-8">Vehicle Parking Management</h1>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Actions Panel -->
+            <div class="col-span-1 space-y-6">
+                <!-- Park Vehicle -->
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-blue-600">
+                    <h2 class="text-xl font-bold mb-4">Park a Vehicle</h2>
+                    <input type="text" id="park-num" placeholder="Vehicle Number (e.g. KA-01-1234)" class="w-full mb-3 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="park-type" class="w-full mb-4 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="Car">Car</option>
+                        <option value="Bike">Bike</option>
+                    </select>
+                    <button onclick="parkVehicle()" class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 transition">Calculate Route & Assign Slot</button>
+                </div>
+
+                <!-- Exit Vehicle -->
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-red-500">
+                    <h2 class="text-xl font-bold mb-4">Exit Vehicle</h2>
+                    <input type="text" id="exit-slot" placeholder="Slot Number" class="w-full mb-4 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-red-500">
+                    <button onclick="exitVehicle()" class="w-full bg-red-500 text-white py-2 rounded font-bold hover:bg-red-600 transition">Generate Receipt</button>
+                    
+                    <!-- Receipt Output -->
+                    <div id="receipt-box" class="mt-4 hidden bg-gray-50 p-4 border border-dashed border-gray-400 rounded">
+                        <h3 class="font-bold text-center border-b pb-2 mb-2">RECEIPT</h3>
+                        <p class="text-sm">Vehicle: <span id="r-veh" class="font-mono font-bold"></span></p>
+                        <p class="text-sm">Slot: <span id="r-slot" class="font-mono font-bold"></span></p>
+                        <p class="text-sm">Duration: <span id="r-dur" class="font-mono font-bold"></span> min</p>
+                        <p class="text-xl font-bold text-green-600 mt-2 text-center">Total: ₹<span id="r-fee"></span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spatial Map & Grid Visualization -->
+            <div class="col-span-2 space-y-6">
+                
+                <!-- 2D Canvas Map -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4 flex justify-between items-center">
+                        Live Lot Map & Routing 
+                        <span class="text-sm font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Entrance = Bottom Center</span>
+                    </h2>
+                    <div class="relative w-full bg-gray-900 rounded-lg overflow-hidden flex justify-center border-4 border-gray-800 shadow-inner" style="height: 400px;">
+                        <canvas id="parkingMap" width="800" height="400" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                </div>
+
+                <!-- Status Cards -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">Slot Directory</h2>
+                    <div id="slot-grid" class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <!-- Slots injected by JS -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:8000";
+        
+        // Physical coordinates for the 10 parking slots on our 800x400 canvas
+        const SLOT_COORDS = {
+            '1': {x: 100, y: 80},  '2': {x: 250, y: 80},  '3': {x: 400, y: 80},  '4': {x: 550, y: 80},  '5': {x: 700, y: 80},
+            '6': {x: 100, y: 220}, '7': {x: 250, y: 220}, '8': {x: 400, y: 220}, '9': {x: 550, y: 220}, '10':{x: 700, y: 220}
+        };
+        const ENTRANCE = {x: 400, y: 380}; // Bottom center
+
+        let globalSlots = [];
+
+        // Draw the 2D Map and Shortest Path
+        function renderMap(targetSlotStr = null) {
+            const canvas = document.getElementById('parkingMap');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Entrance
+            ctx.fillStyle = '#f59e0b'; // Amber
+            ctx.fillRect(350, 360, 100, 40);
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText('ENTRANCE', 355, 385);
+
+            // Draw Slots
+            globalSlots.forEach(slot => {
+                const coords = SLOT_COORDS[slot.slot_number];
+                if(!coords) return;
+
+                const isOccupied = slot.status === 'occupied';
+                
+                // Slot Box
+                ctx.fillStyle = isOccupied ? '#ef4444' : '#22c55e'; // Red vs Green
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.fillRect(coords.x - 40, coords.y - 40, 80, 80);
+                ctx.strokeRect(coords.x - 40, coords.y - 40, 80, 80);
+
+                // Slot Text
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 24px sans-serif';
+                ctx.fillText(slot.slot_number, coords.x - 10, coords.y - 10);
+                
+                if (isOccupied && slot.vehicle_number) {
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText(slot.vehicle_number, coords.x - 35, coords.y + 20);
+                }
+            });
+
+            // Draw Routing Path if a vehicle just parked
+            if (targetSlotStr && SLOT_COORDS[targetSlotStr]) {
+                const target = SLOT_COORDS[targetSlotStr];
+                
+                ctx.beginPath();
+                ctx.moveTo(ENTRANCE.x, ENTRANCE.y);
+                
+                // Simulate an L-shaped pathfinding route (A* will generate actual waypoints later)
+                ctx.lineTo(target.x, ENTRANCE.y - 40); // Move up from entrance
+                ctx.lineTo(target.x, target.y + 40);   // Move horizontally to target col
+                
+                ctx.strokeStyle = '#3b82f6'; // Blue route line
+                ctx.lineWidth = 6;
+                ctx.setLineDash([15, 10]); // Dashed line
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset
+                
+                // Draw target blip
+                ctx.beginPath();
+                ctx.arc(target.x, target.y + 45, 10, 0, Math.PI * 2);
+                ctx.fillStyle = '#3b82f6';
+                ctx.fill();
+            }
+        }
+
+        // Fetch and render the data
+        async function loadStatus(targetSlotForPath = null) {
+            const res = await fetch(`${API_URL}/status`);
+            const data = await res.json();
+            globalSlots = data.slots;
+            
+            // 1. Render HTML Directory
+            const grid = document.getElementById('slot-grid');
+            grid.innerHTML = '';
+            data.slots.forEach(slot => {
+                const isOccupied = slot.status === 'occupied';
+                const color = isOccupied ? 'bg-red-50 border-red-300 text-red-800' : 'bg-green-50 border-green-300 text-green-800';
+                
+                grid.innerHTML += `
+                    <div class="border p-3 rounded-lg text-center shadow-sm ${color}">
+                        <h3 class="font-bold text-xl mb-1">Slot ${slot.slot_number}</h3>
+                        <p class="text-xs uppercase tracking-wider font-bold opacity-75">${slot.status}</p>
+                        ${isOccupied ? `<p class="mt-2 text-xs font-mono bg-white/60 py-1 rounded border">${slot.vehicle_number}</p>` : ''}
+                    </div>
+                `;
+            });
+
+            // 2. Render 2D Canvas Map
+            renderMap(targetSlotForPath);
+        }
+
+        // Park vehicle API call
+        async function parkVehicle() {
+            const num = document.getElementById('park-num').value;
+            const type = document.getElementById('park-type').value;
+            if(!num) return alert("Enter vehicle number");
+
+            const res = await fetch(`${API_URL}/park`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vehicle_number: num, vehicle_type: type })
+            });
+            const data = await res.json();
+            if(res.ok) {
+                // Reload status and pass the assigned slot to draw the path
+                loadStatus(data.slot);
+                document.getElementById('park-num').value = '';
+            } else alert(data.detail);
+        }
+
+        // Exit vehicle API call
+        async function exitVehicle() {
+            const slot = document.getElementById('exit-slot').value;
+            if(!slot) return alert("Enter slot number");
+
+            const res = await fetch(`${API_URL}/exit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slot_number: slot })
+            });
+            const data = await res.json();
+            
+            if(res.ok) {
+                document.getElementById('receipt-box').classList.remove('hidden');
+                document.getElementById('r-veh').innerText = data.receipt.vehicle_number;
+                document.getElementById('r-slot').innerText = data.receipt.slot_number;
+                document.getElementById('r-dur').innerText = data.receipt.duration_minutes;
+                document.getElementById('r-fee').innerText = data.receipt.total_fee;
+                document.getElementById('exit-slot').value = '';
+                
+                loadStatus(); // Refresh map without path
+            } else {
+                alert(data.detail);
+            }
+        }
+
+        // Initialize
+        loadStatus();
+    </script>
+</body>
+</html>
