@@ -1,4 +1,4 @@
-Markdown# 🚗 Smart Vehicle Parking Management System
+🚗 Smart Vehicle Parking Management System
 
 An AI-powered, full-stack parking management system designed to optimize urban parking infrastructure. This project features dynamic pricing calculated via machine learning, real-time spatial pathfinding on a 2D interactive canvas, and a highly scalable containerized backend.
 
